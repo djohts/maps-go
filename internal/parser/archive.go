@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"archive/zip"
 	"bytes"
 	"fmt"
 	"io"
@@ -123,33 +122,23 @@ func readSIIEntries(archivePaths []string) (map[string]string, []string) {
 	entries := map[string]string{}
 	warnings := make([]string, 0)
 	for _, archivePath := range archivePaths {
-		r, err := zip.OpenReader(archivePath)
+		r, err := openArchiveReader(archivePath)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("warning: unable to open archive %s as zip: %v", archivePath, err))
+			warnings = append(warnings, fmt.Sprintf("warning: unable to open archive %s: %v", archivePath, err))
 			continue
 		}
-		for _, file := range r.File {
-			if file.FileInfo().IsDir() {
-				continue
-			}
-			name := strings.ToLower(strings.TrimPrefix(file.Name, "/"))
+		for _, name := range r.FileNames() {
 			if !strings.HasSuffix(name, ".sii") {
 				continue
 			}
-			rc, err := file.Open()
+			content, err := r.ReadFile(name)
 			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("warning: unable to read file %s in %s: %v", file.Name, archivePath, err))
-				continue
-			}
-			content, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("warning: unable to read file %s in %s: %v", file.Name, archivePath, err))
+				warnings = append(warnings, fmt.Sprintf("warning: unable to read file %s in %s: %v", name, archivePath, err))
 				continue
 			}
 			entries[name] = string(content)
 		}
-		r.Close()
+		_ = r.Close()
 	}
 	return entries, warnings
 }

@@ -1,9 +1,9 @@
 package parser
 
 import (
-	"archive/zip"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -121,30 +121,23 @@ type manifestMetadata struct {
 }
 
 func readManifestMetadata(archivePath string) (*manifestMetadata, string) {
-	r, err := zip.OpenReader(archivePath)
+	r, err := openArchiveReader(archivePath)
 	if err != nil {
-		// Not all .scs files are zip-readable; keep mod in index without metadata.
+		// Keep mod in index without metadata when archive cannot be read.
 		return nil, ""
 	}
 	defer r.Close()
 
-	files := map[string]*zip.File{}
-	for _, f := range r.File {
-		files[strings.ToLower(strings.TrimPrefix(f.Name, "/"))] = f
-	}
-
 	for _, candidate := range manifestCandidatePaths {
-		f, ok := files[strings.ToLower(candidate)]
-		if !ok {
+		data, err := r.ReadFile(candidate)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Sprintf("ignoring unreadable manifest %s in %s: %v", candidate, archivePath, err)
+		}
+		if len(data) == 0 {
 			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Sprintf("ignoring unreadable manifest %s in %s: %v", candidate, archivePath, err)
-		}
-		data, err := readAll(rc)
-		if err != nil {
-			return nil, fmt.Sprintf("ignoring unreadable manifest %s in %s: %v", candidate, archivePath, err)
 		}
 		md := parseManifestSII(string(data))
 		md.ManifestPath = candidate
