@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +75,28 @@ func TestRunDryRunDoesNotWriteOutput(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outputDir, "usa-cities.json")); !os.IsNotExist(err) {
 		t.Fatalf("expected no output files on dryRun")
+	}
+}
+
+func TestRunErrorsWhenCollectionsAreEmpty(t *testing.T) {
+	gameDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	mustWriteZip(t, filepath.Join(gameDir, "version.scs"), map[string]string{
+		"version.sii": `SiiNunit\n{\nversion_data : .version {\napplication: "ats"\n}\n}`,
+	})
+	mustWriteZip(t, filepath.Join(gameDir, "def.scs"), map[string]string{})
+	for _, name := range []string{"base.scs", "base_map.scs", "base_share.scs", "core.scs", "locale.scs"} {
+		mustWriteZip(t, filepath.Join(gameDir, name), map[string]string{})
+	}
+
+	var buf bytes.Buffer
+	err := Run([]string{"-g", gameDir, "-o", outputDir}, &buf)
+	if err == nil {
+		t.Fatalf("Run() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "no parser data was extracted") {
+		t.Fatalf("Run() error = %q, expected missing parser data message", err)
 	}
 }
 

@@ -115,6 +115,9 @@ func Run(args []string, stdout io.Writer) error {
 		data = result.DefData
 		keys = defDataKeys
 	}
+	if !hasCollectionData(data, keys) {
+		return errors.New("no parser data was extracted from the selected archives; refusing to write empty output JSON files")
+	}
 	for _, key := range keys {
 		collection, ok := data[key]
 		if !ok {
@@ -227,4 +230,13 @@ func writeJSONArray(path string, values []any) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+func hasCollectionData(collections map[string][]any, keys []string) bool {
+	for _, key := range keys {
+		if len(collections[key]) > 0 {
+			return true
+		}
+	}
+	return false
 }

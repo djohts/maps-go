@@ -435,11 +435,15 @@ func pickV2Metadata(metadataByIndex map[uint32]scsV2Metadata, start uint32, coun
 func (r *scsArchiveReader) buildFileIndex() error {
 	visited := map[string]bool{}
 	if _, ok := r.directories[r.hashPath("")]; ok {
-		r.walkDirectory("", visited)
+		if err := r.walkDirectory("", visited); err != nil {
+			return err
+		}
 	} else {
 		for _, root := range []string{"def", "map", "locale", "mod"} {
 			if _, ok := r.directories[r.hashPath(root)]; ok {
-				r.walkDirectory(root, visited)
+				if err := r.walkDirectory(root, visited); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -462,21 +466,21 @@ func (r *scsArchiveReader) buildFileIndex() error {
 	return nil
 }
 
-func (r *scsArchiveReader) walkDirectory(dirPath string, visited map[string]bool) {
+func (r *scsArchiveReader) walkDirectory(dirPath string, visited map[string]bool) error {
 	dirPath = normalizeArchivePath(dirPath)
 	visitedKey := strings.ToLower(dirPath)
 	if visited[visitedKey] {
-		return
+		return nil
 	}
 	visited[visitedKey] = true
 
 	dirEntry, ok := r.directories[r.hashPath(dirPath)]
 	if !ok {
-		return
+		return nil
 	}
 	subdirs, files, err := r.readDirectoryListing(dirEntry)
 	if err != nil {
-		return
+		return fmt.Errorf("read directory listing %q: %w", dirPath, err)
 	}
 
 	for _, file := range files {
@@ -491,8 +495,11 @@ func (r *scsArchiveReader) walkDirectory(dirPath string, visited map[string]bool
 		r.filesByName[strings.ToLower(fullPath)] = entry
 	}
 	for _, subdirectory := range subdirs {
-		r.walkDirectory(joinArchivePath(dirPath, subdirectory), visited)
+		if err := r.walkDirectory(joinArchivePath(dirPath, subdirectory), visited); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (r *scsArchiveReader) readDirectoryListing(entry scsEntry) ([]string, []string, error) {

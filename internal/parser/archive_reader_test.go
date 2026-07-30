@@ -49,6 +49,24 @@ func TestReadSIIEntriesReadsSCSV2Archive(t *testing.T) {
 	}
 }
 
+func TestReadSIIEntriesWarnsOnUnsupportedDirectoryCompression(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "game.scs")
+	mustWriteSCSV2WithDirectoryCompression(t, archivePath, map[string]string{
+		"version.sii": `SiiNunit { version_data : .version { application: "ats" } }`,
+	}, scsCompressionGDeflate)
+
+	entries, warnings := readSIIEntries([]string{archivePath})
+	if len(entries) != 0 {
+		t.Fatalf("expected no entries, got %d", len(entries))
+	}
+	if len(warnings) == 0 {
+		t.Fatalf("expected warning for unsupported directory compression")
+	}
+	if !strings.Contains(warnings[0], "unsupported SCS compression: gdeflate") {
+		t.Fatalf("warning = %q, want unsupported compression message", warnings[0])
+	}
+}
+
 func TestReadManifestMetadataReadsSCSArchive(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "mod.scs")
 	mustWriteSCSV1(t, archivePath, map[string]string{
@@ -144,6 +162,11 @@ func mustWriteSCSV1(t *testing.T, archivePath string, files map[string]string) {
 
 func mustWriteSCSV2(t *testing.T, archivePath string, files map[string]string) {
 	t.Helper()
+	mustWriteSCSV2WithDirectoryCompression(t, archivePath, files, scsCompressionNone)
+}
+
+func mustWriteSCSV2WithDirectoryCompression(t *testing.T, archivePath string, files map[string]string, directoryCompression scsCompression) {
+	t.Helper()
 
 	directories := buildTestDirectoryTree(files)
 	entries := buildTestArchiveEntries(directories, files, true)
@@ -203,6 +226,9 @@ func mustWriteSCSV2(t *testing.T, archivePath string, files map[string]string) {
 		}
 
 		packedCompression := uint32(len(entry.data))
+		if entry.isDirectory {
+			packedCompression |= uint32(directoryCompression) << 28
+		}
 		binary.LittleEndian.PutUint32(buffer[descriptorOffset:descriptorOffset+4], packedCompression)
 		binary.LittleEndian.PutUint32(buffer[descriptorOffset+4:descriptorOffset+8], uint32(len(entry.data)))
 		binary.LittleEndian.PutUint32(buffer[descriptorOffset+8:descriptorOffset+12], 0)
