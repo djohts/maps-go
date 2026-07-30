@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -78,7 +77,7 @@ func TestRunDryRunDoesNotWriteOutput(t *testing.T) {
 	}
 }
 
-func TestRunErrorsWhenCollectionsAreEmpty(t *testing.T) {
+func TestRunWritesEmptyCollections(t *testing.T) {
 	gameDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -92,11 +91,14 @@ func TestRunErrorsWhenCollectionsAreEmpty(t *testing.T) {
 
 	var buf bytes.Buffer
 	err := Run([]string{"-g", gameDir, "-o", outputDir}, &buf)
-	if err == nil {
-		t.Fatalf("Run() error = nil, want non-nil")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "no parser data was extracted") {
-		t.Fatalf("Run() error = %q, expected missing parser data message", err)
+	for _, key := range mapDataKeys {
+		path := filepath.Join(outputDir, "usa-"+key+".json")
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected output file %s: %v", path, err)
+		}
 	}
 }
 
